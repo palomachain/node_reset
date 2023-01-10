@@ -1,0 +1,16 @@
+[Unit]
+Description=node reset daemon
+After=network-online.target
+
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+ExecStart=/home/ubuntu/node_reset/start.sh
+ExecReload=
+
+[Install]
+WantedBy=multi-user.target
