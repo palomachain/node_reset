@@ -102,7 +102,11 @@ async function main() {
         console.log("system catching up");
     }
     console.log("*******************************");
+
+    return 0;
 }
 
 
-main();
+return main();
+
+
