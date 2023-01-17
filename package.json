@@ -13,6 +13,7 @@
   "dependencies": {
     "@palomachain/paloma.js": "^3.0.24",
     "@sentry/node": "^7.29.0",
-    "dotenv": "^16.0.3"
+    "dotenv": "^16.0.3",
+    "http": "^0.0.1-security"
   }
 }
