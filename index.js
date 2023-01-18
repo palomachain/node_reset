@@ -75,6 +75,7 @@ async function server_start() {
 }
 
 async function main() {
+    console.log('checking local');
     let local_data = await get_local_data();
 
     if(local_data && local_data.SyncInfo) {
