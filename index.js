@@ -33,13 +33,23 @@ async function get_local_data() {
     try {
         const child = spawn("palomad",['status']);
 
-        child.stdout.on('data', data => {
-            return JSON.parse(data);
-        })
+        // child.stdout.on('data', data => {
+        //     return JSON.parse(data);
+        // })
 
-        child.stderr.on("data", (data) => {
-            Sentry.captureException(`stderr: ${data}`);
-        });
+        for await (const data of child.stdout) {
+            return JSON.parse(data);
+            //console.log(`stdout from the child: ${data}`);
+        };
+
+        for await (const data of child.stderr) {
+            Sentry.captureException(`CHECK IS SERVER IS UP: ${data}`);
+            //console.log(`stdout from the child: ${data}`);
+        };
+
+        // child.stderr.on("data", (data) => {
+        //     Sentry.captureException(`stderr: ${data}`);
+        // });
     } catch (err) {
         Sentry.captureException(err);
         return null;
