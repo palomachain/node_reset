@@ -6,12 +6,17 @@ import http from 'http';
 
 dotenv.config()
 
+let use_sentry = false;
 
-Sentry.init({
-    dsn: "https://7fa0dfc6e0cc4e4697e58299b215c55a@o1200162.ingest.sentry.io/6380489",
+if(process.env.SENTRY) {
+    Sentry.init({
+        dsn: process.env.SENTRY,
 
-    tracesSampleRate: 1.0,
-});
+        tracesSampleRate: 1.0,
+    });
+
+    use_sentry = true;
+}
 
 const paloma = new LCDClient({
     URL: `${process.env.LCD_URL}`,
@@ -29,29 +34,28 @@ function sleep(ms) {
     });
 }
 
+function captureException(exception) {
+    if(use_sentry) { Sentry.captureException(exception); }
+}
+
+function captureMessage(message) {
+    if(use_sentry) { Sentry.captureMessage(message); }
+}
+
 async function get_local_data() {
     try {
         const child = spawn("palomad",['status']);
 
-        // child.stdout.on('data', data => {
-        //     return JSON.parse(data);
-        // })
 
         for await (const data of child.stdout) {
             return JSON.parse(data);
-            //console.log(`stdout from the child: ${data}`);
         };
 
         for await (const data of child.stderr) {
-            Sentry.captureException(`CHECK IS SERVER IS UP: ${data}`);
-            //console.log(`stdout from the child: ${data}`);
+            captureException(`CHECK IS SERVER IS UP: ${data}`);
         };
-
-        // child.stderr.on("data", (data) => {
-        //     Sentry.captureException(`stderr: ${data}`);
-        // });
     } catch (err) {
-        Sentry.captureException(err);
+        captureException(err);
         return null;
     }
 }
@@ -65,7 +69,7 @@ async function server_stop() {
             console.log(data);
         }
     } catch (err) {
-        Sentry.captureException(err);
+        captureException(err);
         return null;
     }
 }
@@ -79,27 +83,24 @@ async function server_start() {
             console.log(data);
         }
     } catch (err) {
-        Sentry.captureException(err);
+        captureException(err);
         return null;
     }
 }
 
-async function main() {
-    console.log('checking local');
-    let local_data = await get_local_data();
-
-    if(local_data && local_data.SyncInfo) {
+async function check_and_sync(local_data) {
+    try {
         if (!local_data.SyncInfo.catching_up) {
             console.log("local:", local_data.SyncInfo.latest_block_height);
             if (local_data.SyncInfo.latest_block_height + 20 < block_height) {
                 try {
-                    Sentry.captureMessage("RESYNC OF SERVER");
+                    captureMessage("RESYNC OF SERVER");
 
                     await server_stop();
                     await sleep(3 * 60 * 1000);
                     await server_start();
                 } catch (err) {
-                    Sentry.captureException(err);
+                    captureException(err);
                     console.log(err.stack);
                 }
 
@@ -107,7 +108,26 @@ async function main() {
         } else {
             console.log("system catching up");
         }
+    } catch (err) {}
+}
+
+async function check_jail(local_data) {
+    if(process.env.CHECK_JAIL) {
+        if (local_data.ValidatorInfo.VotingPower == '0') {
+            captureException("SERVER NO LONGER VALIDATING")
+        } else {
+            console.log("system catching up");
+        }
     }
+}
+
+async function main() {
+    console.log('checking local');
+    let local_data = await get_local_data();
+
+    await check_and_sync(local_data);
+
+
 
     return 0;
 }
