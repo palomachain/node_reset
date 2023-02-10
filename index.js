@@ -81,6 +81,7 @@ async function server_start() {
 async function get_start_height() {
     let local_data = await get_local_data();
     block_height = local_data.SyncInfo.latest_block_height;
+   console.log("initial:",  block_height);
 }
 
 async function check_and_sync(local_data) {
