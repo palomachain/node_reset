@@ -7,6 +7,7 @@ import http from 'http';
 dotenv.config()
 
 let use_sentry = false;
+let block_height = 0;
 
 if(process.env.SENTRY) {
     Sentry.init({
@@ -17,16 +18,6 @@ if(process.env.SENTRY) {
 
     use_sentry = true;
 }
-
-const paloma = new LCDClient({
-    URL: `${process.env.LCD_URL}`,
-    chainID: process.env.CHAIN_ID,
-});
-
-let block_info = await paloma.tendermint.blockInfo();
-let block_height = block_info.block.header.height;
-console.log(`${process.env.LCD_URL}:`, block_height);
-
 
 function sleep(ms) {
     return new Promise((resolve) => {
@@ -45,7 +36,6 @@ function captureMessage(message) {
 async function get_local_data() {
     try {
         const child = spawn("palomad",['status']);
-
 
         for await (const data of child.stdout) {
             return JSON.parse(data);
@@ -88,37 +78,32 @@ async function server_start() {
     }
 }
 
-async function check_and_sync(local_data) {
-    try {
-        if (!local_data.SyncInfo.catching_up) {
-            console.log("local:", local_data.SyncInfo.latest_block_height);
-            if (local_data.SyncInfo.latest_block_height + 20 < block_height) {
-                try {
-                    captureMessage("RESYNC OF SERVER");
-
-                    await server_stop();
-                    await sleep(3 * 60 * 1000);
-                    await server_start();
-                } catch (err) {
-                    captureException(err);
-                    console.log(err.stack);
-                }
-
-            }
-        } else {
-            console.log("system catching up");
-        }
-    } catch (err) {}
+async function get_start_height() {
+    let local_data = await get_local_data();
+    block_height = local_data.SyncInfo.latest_block_height;
 }
 
-async function check_jail(local_data) {
-    if(process.env.CHECK_JAIL) {
-        if (local_data.ValidatorInfo.VotingPower == '0') {
-            captureException("SERVER NO LONGER VALIDATING")
+async function check_and_sync(local_data) {
+    try {
+        console.log("last:", block_height);
+        console.log("current:", local_data.SyncInfo.latest_block_height);
+
+        if (local_data.SyncInfo.latest_block_height === block_height) {
+            try {
+                captureMessage("RESYNC OF SERVER");
+
+                await server_stop();
+                await sleep(3 * 60 * 1000);
+                await server_start();
+            } catch (err) {
+                captureException(err);
+                console.log(err.stack);
+            }
+
         } else {
-            console.log("system catching up");
+            block_height = local_data.SyncInfo.latest_block_height;
         }
-    }
+    } catch (err) {}
 }
 
 async function main() {
@@ -127,12 +112,11 @@ async function main() {
 
     await check_and_sync(local_data);
 
-
-
     return 0;
 }
 
-await main();
+setTimeout(get_start_height, 2000);
+setInterval(main, 80000);
 
 // setInterval(main, 1000 * 60 * 5);
 //
